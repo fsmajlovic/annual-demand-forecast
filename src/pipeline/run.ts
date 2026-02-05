@@ -8,11 +8,13 @@ import { writeJson, writeCsv, getRunDir, ensureDir } from '../utils/io.js';
 import { generateRunId, hashObject } from '../utils/hash.js';
 import type { PipelineInputs, RunMetadata, AuditLogEntry } from '../domain/types.js';
 import { normalizeInputs } from './normalize.js';
+import { checkRegulatoryStatus, hasDataReliabilityWarning, getRegulatoryStatusSummary } from './regulatoryCheck.js';
 import { buildTreatmentMap } from './buildTreatmentMap.js';
 import { resolveAssumptions } from './resolveAssumptions.js';
 import { allocatePopulation } from './population.js';
 import { calculateDemand } from './exposure.js';
 import { generateForecast } from './forecast.js';
+import type { RegulatoryStatus } from '../llm/schemas.js';
 
 const logger = createLogger('pipeline');
 
@@ -35,6 +37,27 @@ export async function runPipeline(inputs: PipelineInputs): Promise<PipelineRunRe
     logger.info('Stage 0: Normalizing inputs');
     const { result: normalized_input, audit: normalize_audit } = await normalizeInputs(inputs);
     audit_log.push(normalize_audit);
+
+    // Stage 0.5: Check regulatory status
+    logger.info('Stage 0.5: Checking regulatory status');
+    const { status: regulatory_status, audit: regulatory_audit } = await checkRegulatoryStatus(
+      normalized_input.canonical_disease_name,
+      normalized_input.canonical_molecule_name,
+      inputs.geo,
+      use_cache
+    );
+    audit_log.push(regulatory_audit);
+
+    // Log warning if data reliability is questionable
+    if (hasDataReliabilityWarning(regulatory_status)) {
+      logger.warn(
+        {
+          status: regulatory_status.status,
+          warning: regulatory_status.data_reliability_warning,
+        },
+        'DATA RELIABILITY WARNING: Molecule has limited regulatory approval'
+      );
+    }
 
     // Stage 1: Build treatment map
     logger.info('Stage 1: Building treatment landscape map');
@@ -70,6 +93,7 @@ export async function runPipeline(inputs: PipelineInputs): Promise<PipelineRunRe
 
     // Save intermediate artifacts
     await writeJson(join(run_dir, 'normalized_input.json'), normalized_input);
+    await writeJson(join(run_dir, 'regulatory_status.json'), regulatory_status);
     await writeJson(join(run_dir, 'treatment_map.json'), treatment_map);
     await writeJson(join(run_dir, 'assumptions.json'), assumptions);
 
@@ -114,7 +138,7 @@ export async function runPipeline(inputs: PipelineInputs): Promise<PipelineRunRe
     logger.info({ run_id, duration_sec }, 'Pipeline run completed successfully');
 
     // Print summary
-    printSummary(run_id, treatment_map, demand_nodes, forecast_records);
+    printSummary(run_id, treatment_map, regulatory_status, demand_nodes, forecast_records);
 
     return {
       run_id,
@@ -138,6 +162,7 @@ export async function runPipeline(inputs: PipelineInputs): Promise<PipelineRunRe
 function printSummary(
   run_id: string,
   treatment_map: any,
+  regulatory_status: RegulatoryStatus,
   demand_nodes: any[],
   forecast_records: any[]
 ): void {
@@ -148,8 +173,19 @@ function printSummary(
   console.log(`Disease: ${treatment_map.disease}`);
   console.log(`Molecule: ${treatment_map.molecule}`);
   console.log(`Geography: ${treatment_map.geo}`);
+  console.log(`Regulatory Status: ${getRegulatoryStatusSummary(regulatory_status)}`);
   console.log(`Treatment nodes: ${treatment_map.nodes.length}`);
   console.log(`Citations: ${treatment_map.evidence_index.length}`);
+
+  // Show warning banner if data reliability is questionable
+  if (hasDataReliabilityWarning(regulatory_status)) {
+    console.log();
+    console.log('⚠️  ' + '='.repeat(74) + '  ⚠️');
+    console.log('⚠️  DATA RELIABILITY WARNING');
+    console.log('⚠️  ' + '-'.repeat(74) + '  ⚠️');
+    console.log(`⚠️  ${regulatory_status.data_reliability_warning || 'This molecule may have limited commercial relevance.'}`);
+    console.log('⚠️  ' + '='.repeat(74) + '  ⚠️');
+  }
   console.log();
 
   // 2024 demand summary

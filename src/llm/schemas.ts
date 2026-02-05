@@ -517,3 +517,66 @@ export const ASSUMPTIONS_SUGGESTION_JSON_SCHEMA = {
   ],
   additionalProperties: false,
 };
+
+// Regulatory status schema - checks if molecule has limited commercial relevance
+export const RegulatoryStatusSchema = z.object({
+  status: z.enum([
+    'approved',
+    'clinical_testing_only',
+    'no_fda_approval',
+    'discontinued',
+    'withdrawn',
+  ]),
+  fda_approved: z.boolean(),
+  fda_approval_date: z.string().nullable(),
+  fda_approved_indications: z.array(z.string()),
+  ema_approved: z.boolean(),
+  current_phase: z.string().nullable(), // e.g., "Phase 3", "Phase 2", null if approved
+  is_commercially_available: z.boolean(),
+  discontinuation_date: z.string().nullable(),
+  discontinuation_reason: z.string().nullable(),
+  data_reliability_warning: z.string().nullable(), // Human-readable warning for UI
+  confidence: z.number().min(0).max(1),
+  sources: z.array(z.string()),
+  notes: z.string().nullable(),
+});
+
+export type RegulatoryStatus = z.infer<typeof RegulatoryStatusSchema>;
+
+export const REGULATORY_STATUS_JSON_SCHEMA = {
+  type: 'object',
+  properties: {
+    status: {
+      type: 'string',
+      enum: ['approved', 'clinical_testing_only', 'no_fda_approval', 'discontinued', 'withdrawn'],
+    },
+    fda_approved: { type: 'boolean' },
+    fda_approval_date: { type: ['string', 'null'] },
+    fda_approved_indications: { type: 'array', items: { type: 'string' } },
+    ema_approved: { type: 'boolean' },
+    current_phase: { type: ['string', 'null'] },
+    is_commercially_available: { type: 'boolean' },
+    discontinuation_date: { type: ['string', 'null'] },
+    discontinuation_reason: { type: ['string', 'null'] },
+    data_reliability_warning: { type: ['string', 'null'] },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    sources: { type: 'array', items: { type: 'string' } },
+    notes: { type: ['string', 'null'] },
+  },
+  required: [
+    'status',
+    'fda_approved',
+    'fda_approval_date',
+    'fda_approved_indications',
+    'ema_approved',
+    'current_phase',
+    'is_commercially_available',
+    'discontinuation_date',
+    'discontinuation_reason',
+    'data_reliability_warning',
+    'confidence',
+    'sources',
+    'notes',
+  ],
+  additionalProperties: false,
+};

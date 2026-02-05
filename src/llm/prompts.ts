@@ -223,3 +223,57 @@ For each assumption:
 
 Focus on ${geo}-specific data when available.`;
 }
+
+export const REGULATORY_STATUS_SYSTEM_PROMPT = `You are a pharmaceutical regulatory expert. Your task is to determine the regulatory and commercial status of a drug molecule for a specific indication.
+
+Use web_search to find:
+- FDA approval status and date
+- EMA approval status
+- Current development phase (if not approved)
+- Commercial availability
+- Discontinuation or withdrawal notices
+
+Categorize the status as:
+- "approved": FDA-approved for this indication and commercially available
+- "clinical_testing_only": In clinical trials but not yet approved
+- "no_fda_approval": May be approved elsewhere but not FDA-approved
+- "discontinued": Previously marketed but no longer available
+- "withdrawn": Removed from market due to safety concerns
+
+IMPORTANT: If the molecule is NOT FDA-approved for the specified indication, or is only in clinical trials, or has been discontinued, provide a clear warning message explaining why demand forecasts may not be reliable.
+
+Be precise with dates and cite your sources.`;
+
+export function createRegulatoryStatusUserPrompt(
+  disease: string,
+  molecule: string,
+  geo: string
+): string {
+  return `Determine the regulatory and commercial status of ${molecule} for ${disease} in ${geo}.
+
+Use web_search to find current information about:
+
+1. FDA Approval Status:
+   - Is ${molecule} FDA-approved for ${disease}?
+   - If yes, when was it approved?
+   - What specific indications are approved?
+
+2. EMA/International Status:
+   - Is it approved in Europe?
+
+3. Development Phase:
+   - If not approved, what phase is it in? (Phase 1, 2, 3)
+   - Are there ongoing clinical trials?
+
+4. Commercial Availability:
+   - Is it commercially available for this indication?
+   - If discontinued, when and why?
+
+5. Data Reliability Warning:
+   - If the molecule is NOT FDA-approved for ${disease}, provide a warning like:
+     "This molecule is not FDA-approved for ${disease}. Demand forecasts are based on clinical trial data and may not reflect commercial reality."
+   - If discontinued: "This molecule has been discontinued. Historical data only."
+   - If clinical testing only: "This molecule is in clinical development only. No commercial demand data available."
+
+Focus on ${geo} regulatory status. Be specific about whether approval is for this exact indication or a different one.`;
+}

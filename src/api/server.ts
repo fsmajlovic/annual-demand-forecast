@@ -8,6 +8,7 @@ import { runPipeline } from '../pipeline/run.js';
 import { readJson, getRunDir } from '../utils/io.js';
 import { createLogger } from '../utils/log.js';
 import type { PipelineInputs, TreatmentMap, Assumptions, DemandNode } from '../domain/types.js';
+import type { RegulatoryStatus } from '../llm/schemas.js';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { config } from 'dotenv';
@@ -85,6 +86,7 @@ app.get('/api/run', async (req, res) => {
 
     // Load results for response
     const treatment_map = await readJson<TreatmentMap>(join(result.run_dir, 'treatment_map.json'));
+    const regulatory_status = await readJson<RegulatoryStatus>(join(result.run_dir, 'regulatory_status.json'));
     const assumptions = await readJson<Assumptions>(join(result.run_dir, 'assumptions.json'));
     const demand_nodes = await readJson<DemandNode[]>(
       join(result.run_dir, `demand_${assumptions.base_year}_nodes.json`)
@@ -115,6 +117,17 @@ app.get('/api/run', async (req, res) => {
     const response = {
       run_id: result.run_id,
       success: true,
+      regulatory_status: {
+        status: regulatory_status.status,
+        fda_approved: regulatory_status.fda_approved,
+        fda_approval_date: regulatory_status.fda_approval_date,
+        fda_approved_indications: regulatory_status.fda_approved_indications,
+        ema_approved: regulatory_status.ema_approved,
+        current_phase: regulatory_status.current_phase,
+        is_commercially_available: regulatory_status.is_commercially_available,
+        data_reliability_warning: regulatory_status.data_reliability_warning,
+        confidence: regulatory_status.confidence,
+      },
       summary: {
         disease: treatment_map.disease,
         molecule: treatment_map.molecule,
