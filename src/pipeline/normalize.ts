@@ -40,7 +40,7 @@ export async function normalizeInputs(
     stage: 'normalize',
     model_name: 'gpt-4o-2024-08-06',
     prompt_hash: llm_result.prompt_hash,
-    prompt_preview: user_prompt.substring(0, 200),
+    prompt_preview: user_prompt,
     response_hash: llm_result.response_hash,
     tool_queries: llm_result.tool_outputs?.map((t: any) => t.query),
     cached: llm_result.cached,

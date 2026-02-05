@@ -72,9 +72,9 @@ export function allocatePopulation(
     if (cohort) {
       nodes.push({
         node_id: treatment_node.node_id,
-        eligible_patients: cohort.patients,
-        treated_patients: cohort.patients,
-        patient_years: cohort.patient_years,
+        eligible_patients: Math.round(cohort.patients),
+        treated_patients: Math.round(cohort.patients),
+        patient_years: Math.round(cohort.patient_years * 100) / 100, // 2 decimal places for patient-years
       });
 
       // Store trace for explainability

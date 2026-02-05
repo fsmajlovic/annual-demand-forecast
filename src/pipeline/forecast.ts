@@ -85,12 +85,12 @@ export function generateForecast(
           year: forecast_year,
           node_id: demand_node.node_id,
           scenario: scenario_name,
-          treated_patients: demand_node.treated_patients,
-          patient_years: pop_node.patient_years,
+          treated_patients: Math.round(demand_node.treated_patients),
+          patient_years: Math.round(pop_node.patient_years * 100) / 100,
           administered_mg_per_patient_year:
-            demand_node.administered_mg_per_patient_year,
-          total_administered_mg: demand_node.total_administered_mg,
-          total_dispensed_mg: demand_node.total_dispensed_mg,
+            Math.round(demand_node.administered_mg_per_patient_year),
+          total_administered_mg: Math.round(demand_node.total_administered_mg),
+          total_dispensed_mg: Math.round(demand_node.total_dispensed_mg),
         });
       }
     }

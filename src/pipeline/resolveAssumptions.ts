@@ -157,7 +157,7 @@ export async function resolveAssumptions(
     stage: 'assumptions_suggestion',
     model_name: 'gpt-4o-2024-08-06',
     prompt_hash: suggestion_result.prompt_hash,
-    prompt_preview: suggestion_prompt.substring(0, 200),
+    prompt_preview: suggestion_prompt,
     response_hash: suggestion_result.response_hash,
     tool_queries: suggestion_result.tool_outputs?.map((t: any) => t.query),
     cached: suggestion_result.cached,

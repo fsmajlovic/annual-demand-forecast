@@ -122,13 +122,15 @@ export async function runPipeline(inputs: PipelineInputs): Promise<PipelineRunRe
       success: true,
     };
   } catch (error) {
-    logger.error({ error }, 'Pipeline run failed');
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    logger.error({ error: errorMessage, stack: errorStack }, 'Pipeline run failed');
 
     return {
       run_id: 'failed',
       run_dir: '',
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage,
     };
   }
 }
