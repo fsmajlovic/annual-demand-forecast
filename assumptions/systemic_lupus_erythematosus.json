@@ -1,0 +1,19 @@
+{
+  "incidence": 16000,
+  "prevalence": 204000,
+  "subtype_shares": {
+    "systemic_lupus_erythematosus": 1.0
+  },
+  "stage_shares": {
+    "chronic_treatment": 1.0
+  },
+  "line_shares": {
+    "1L": 1.0,
+    "2L": 0.30
+  },
+  "time_on_treatment_months": {
+    "1L": 120,
+    "2L": 60
+  },
+  "treated_rate": 0.60
+}

@@ -1,0 +1,20 @@
+{
+  "incidence": 300000,
+  "prevalence": 3800000,
+  "subtype_shares": {
+    "HER2+": 0.20
+  },
+  "stage_shares": {
+    "adjuvant": 0.40,
+    "neoadjuvant": 0.25,
+    "metastatic": 0.35
+  },
+  "line_shares": {
+    "1L": 1.0,
+    "2L": 0.40
+  },
+  "time_on_treatment_months": {
+    "1L": 15,
+    "2L": 10
+  }
+}

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.log
+.env
+*.db
+*.db-journal
+runs/
+out/
+.DS_Store
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
