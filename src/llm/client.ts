@@ -6,7 +6,6 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
 import { getCache } from './cache.js';
-import { getSearchClient, type SearchResponse } from './search.js';
 import { createLogger } from '../utils/log.js';
 import { hashString } from '../utils/hash.js';
 
@@ -24,7 +23,7 @@ export interface LLMCallOptions {
 export interface LLMCallResult<T> {
   data: T;
   cached: boolean;
-  tool_outputs?: SearchResponse[];
+  tool_outputs?: unknown[];
   tokens_used?: number;
   prompt_hash: string;
   response_hash: string;
@@ -33,7 +32,6 @@ export interface LLMCallResult<T> {
 export class LLMClient {
   private client: OpenAI;
   private cache = getCache();
-  private searchClient = getSearchClient();
   private default_model: string = 'gpt-4o-2024-08-06';
 
   constructor(api_key?: string) {
@@ -57,8 +55,14 @@ export class LLMClient {
   ): Promise<LLMCallResult<T>> {
     const model = options.model || this.default_model;
     const use_cache = options.use_cache !== false;
-    const use_tools = options.use_tools || false;
+    // gpt-4o-search-preview has native web search - don't pass tools parameter
+    const is_search_model = model.includes('search-preview');
+    const use_tools = is_search_model ? false : (options.use_tools || false);
     const max_retries = options.max_retries || 2;
+
+    if (is_search_model && options.use_tools) {
+      logger.info({ model }, 'Using model with native web search - custom tools disabled');
+    }
 
     // Generate cache key
     const prompt_payload = { system_prompt, user_prompt };
@@ -157,7 +161,8 @@ export class LLMClient {
   }
 
   /**
-   * Call LLM with tool use (web search)
+   * Call LLM with native web search using Responses API
+   * Single call: web search + strict JSON schema output
    */
   private async callWithTools<T>(
     model: string,
@@ -167,132 +172,66 @@ export class LLMClient {
     system_prompt: string,
     user_prompt: string,
     prompt_hash: string,
-    options: LLMCallOptions
+    _options: LLMCallOptions
   ): Promise<LLMCallResult<T>> {
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: 'system', content: system_prompt },
-      { role: 'user', content: user_prompt },
-    ];
+    // Combine system and user prompts for the Responses API input
+    const input = `${system_prompt}\n\n---\n\n${user_prompt}`;
 
-    const tools: OpenAI.Chat.ChatCompletionTool[] = [
-      {
-        type: 'function',
-        function: {
-          name: 'web_search',
-          description:
-            'Search the web for current medical information, clinical guidelines, dosing protocols, FDA approvals, and epidemiological data. Use this to ground your responses with real evidence and citations.',
-          parameters: {
-            type: 'object',
-            properties: {
-              query: {
-                type: 'string',
-                description:
-                  'The search query. Be specific and include key medical terms (drug names, conditions, guidelines, etc.)',
-              },
-            },
-            required: ['query'],
-            additionalProperties: false,
-          },
+    logger.info({ schema_name, model }, 'Using Responses API with native web search');
+
+    // Use Responses API with native web_search tool
+    // This is a single call that handles search + structured output
+    const response = await (this.client as any).responses.create({
+      model,
+      tools: [{ type: 'web_search' }],
+      input,
+      text: {
+        format: {
+          type: 'json_schema',
+          name: schema_name,
+          strict: true,
+          schema: json_schema,
         },
       },
-    ];
-
-    // Step 1: Initial call with tools available
-    let completion = await this.client.chat.completions.create({
-      model,
-      messages,
-      temperature: options.temperature || 0.1,
-      max_tokens: options.max_tokens || 4000,
-      tools,
-      tool_choice: 'auto',
     });
 
-    let message = completion.choices[0].message;
-    const search_results: SearchResponse[] = [];
+    // Extract the output text from the response
+    let output_text: string | undefined;
 
-    // Step 2: Execute tool calls if requested
-    if (message.tool_calls && message.tool_calls.length > 0) {
-      logger.info({ tool_count: message.tool_calls.length }, 'Processing tool calls');
-
-      messages.push(message);
-
-      for (const tool_call of message.tool_calls) {
-        if (tool_call.function.name === 'web_search') {
-          const args = JSON.parse(tool_call.function.arguments);
-          logger.info({ query: args.query }, 'Executing web search');
-
-          const search_response = await this.searchClient.search(args.query, 5);
-          search_results.push(search_response);
-
-          // Format search results for the model
-          const formatted_results = search_response.results
-            .map(
-              (r, idx) =>
-                `[${idx + 1}] ${r.title}\nURL: ${r.url}\nSnippet: ${r.snippet}\n`
-            )
-            .join('\n');
-
-          messages.push({
-            role: 'tool',
-            tool_call_id: tool_call.id,
-            content: `Search results for "${args.query}":\n\n${formatted_results}`,
-          });
+    // Handle different response structures
+    if (response.output_text) {
+      output_text = response.output_text;
+    } else if (response.output) {
+      // Try to find text content in output array
+      for (const item of response.output) {
+        if (item.type === 'message' && item.content) {
+          for (const content of item.content) {
+            if (content.type === 'output_text' || content.type === 'text') {
+              output_text = content.text;
+              break;
+            }
+          }
         }
+        if (output_text) break;
       }
-
-      // Step 3: Get structured response after tool use
-      completion = await this.client.chat.completions.create({
-        model,
-        messages,
-        temperature: options.temperature || 0.1,
-        max_tokens: options.max_tokens || 4000,
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: schema_name,
-            strict: true,
-            schema: json_schema,
-          },
-        },
-      });
-
-      message = completion.choices[0].message;
-    } else {
-      // No tools called, make structured call directly
-      completion = await this.client.chat.completions.create({
-        model,
-        messages,
-        temperature: options.temperature || 0.1,
-        max_tokens: options.max_tokens || 4000,
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: schema_name,
-            strict: true,
-            schema: json_schema,
-          },
-        },
-      });
-
-      message = completion.choices[0].message;
     }
 
-    // Parse and validate response
-    if (!message.content) {
-      throw new Error('No content in LLM response');
+    if (!output_text) {
+      logger.error({ response: JSON.stringify(response).substring(0, 500) }, 'Unexpected response structure');
+      throw new Error('No output text in Responses API response');
     }
 
-    const response_data = JSON.parse(message.content);
-    const response_hash = hashString(message.content);
+    const response_data = JSON.parse(output_text);
+    const response_hash = hashString(output_text);
     const validated_data = zod_schema.parse(response_data);
 
-    logger.info({ schema_name, tokens: completion.usage?.total_tokens }, 'LLM call completed');
+    logger.info({ schema_name, tokens: response.usage?.total_tokens }, 'LLM call completed via Responses API');
 
     return {
       data: validated_data,
       cached: false,
-      tool_outputs: search_results.length > 0 ? search_results : undefined,
-      tokens_used: completion.usage?.total_tokens,
+      tool_outputs: undefined, // Native web search doesn't expose individual search results
+      tokens_used: response.usage?.total_tokens,
       prompt_hash,
       response_hash,
     };
@@ -316,19 +255,24 @@ export class LLMClient {
       { role: 'user', content: user_prompt },
     ];
 
+    // gpt-4o-search-preview doesn't support temperature or response_format
+    const is_search_model = model.includes('search-preview');
+
     const completion = await this.client.chat.completions.create({
       model,
       messages,
-      temperature: options.temperature || 0.1,
+      ...(is_search_model ? {} : { temperature: options.temperature || 0.1 }),
       max_tokens: options.max_tokens || 4000,
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: schema_name,
-          strict: true,
-          schema: json_schema,
+      ...(is_search_model ? {} : {
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: schema_name,
+            strict: true,
+            schema: json_schema,
+          },
         },
-      },
+      }),
     });
 
     const message = completion.choices[0].message;
@@ -337,7 +281,22 @@ export class LLMClient {
       throw new Error('No content in LLM response');
     }
 
-    const response_data = JSON.parse(message.content);
+    // For search models, we need to extract JSON from the response
+    let response_data;
+    if (is_search_model) {
+      // Try to extract JSON from the response
+      const json_match = message.content.match(/```json\n?([\s\S]*?)\n?```/) ||
+                         message.content.match(/\{[\s\S]*\}/);
+      if (json_match) {
+        const json_str = json_match[1] || json_match[0];
+        response_data = JSON.parse(json_str);
+      } else {
+        throw new Error('Could not extract JSON from search model response');
+      }
+    } else {
+      response_data = JSON.parse(message.content);
+    }
+
     const response_hash = hashString(message.content);
     const validated_data = zod_schema.parse(response_data);
 
