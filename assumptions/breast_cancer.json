@@ -10,8 +10,8 @@
     "metastatic": 0.35
   },
   "line_shares": {
-    "1L": 1.0,
-    "2L": 0.40
+    "1L": 0.65,
+    "2L": 0.35
   },
   "time_on_treatment_months": {
     "1L": 15,
