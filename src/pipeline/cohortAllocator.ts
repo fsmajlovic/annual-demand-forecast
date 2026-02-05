@@ -188,15 +188,25 @@ export function allocateCohorts(
   // Subtype shares
   let normalized_subtype_shares: Record<string, number> = {};
   if (unique_subtypes.size > 0 && assumptions.subtype_shares) {
-    const { result, trace } = validateShares(
-      filterSharesForDimension(assumptions.subtype_shares, unique_subtypes),
-      'subtype_shares',
-      config
-    );
-    throwIfInvalid(result, 'subtype_shares');
-    warnings.push(...result.warnings);
-    share_traces.subtype_shares = trace;
-    normalized_subtype_shares = (result.normalized_value as Record<string, number>) || {};
+    const filtered_shares = filterSharesForDimension(assumptions.subtype_shares, unique_subtypes);
+    // If filtering removed all shares (key mismatch), fall back to equal distribution
+    if (Object.keys(filtered_shares).length === 0) {
+      const equal_share = 1.0 / unique_subtypes.size;
+      for (const subtype of unique_subtypes) {
+        normalized_subtype_shares[subtype] = equal_share;
+      }
+      warnings.push(
+        `subtype_shares keys don't match treatment map subtypes. ` +
+        `Expected: [${Array.from(unique_subtypes).join(', ')}]. ` +
+        `Using equal distribution: ${equal_share.toFixed(4)} each.`
+      );
+    } else {
+      const { result, trace } = validateShares(filtered_shares, 'subtype_shares', config);
+      throwIfInvalid(result, 'subtype_shares');
+      warnings.push(...result.warnings);
+      share_traces.subtype_shares = trace;
+      normalized_subtype_shares = (result.normalized_value as Record<string, number>) || {};
+    }
   } else if (unique_subtypes.size > 0) {
     // No subtype shares provided but treatment map has subtypes
     // Create equal shares with warning
@@ -211,15 +221,25 @@ export function allocateCohorts(
   let normalized_setting_shares: Record<string, number> = {};
   const raw_setting_shares = assumptions.setting_shares || assumptions.stage_shares;
   if (unique_settings.size > 0 && raw_setting_shares) {
-    const { result, trace } = validateShares(
-      filterSharesForDimension(raw_setting_shares, unique_settings),
-      'setting_shares',
-      config
-    );
-    throwIfInvalid(result, 'setting_shares');
-    warnings.push(...result.warnings);
-    share_traces.setting_shares = trace;
-    normalized_setting_shares = (result.normalized_value as Record<string, number>) || {};
+    const filtered_shares = filterSharesForDimension(raw_setting_shares, unique_settings);
+    // If filtering removed all shares (key mismatch), fall back to equal distribution
+    if (Object.keys(filtered_shares).length === 0) {
+      const equal_share = 1.0 / unique_settings.size;
+      for (const setting of unique_settings) {
+        normalized_setting_shares[setting] = equal_share;
+      }
+      warnings.push(
+        `setting_shares keys don't match treatment map settings. ` +
+        `Expected: [${Array.from(unique_settings).join(', ')}]. ` +
+        `Using equal distribution: ${equal_share.toFixed(4)} each.`
+      );
+    } else {
+      const { result, trace } = validateShares(filtered_shares, 'setting_shares', config);
+      throwIfInvalid(result, 'setting_shares');
+      warnings.push(...result.warnings);
+      share_traces.setting_shares = trace;
+      normalized_setting_shares = (result.normalized_value as Record<string, number>) || {};
+    }
   } else if (unique_settings.size > 0) {
     const equal_share = 1.0 / unique_settings.size;
     for (const setting of unique_settings) {
@@ -231,15 +251,25 @@ export function allocateCohorts(
   // Line shares
   let normalized_line_shares: Record<string, number> = {};
   if (unique_lines.size > 0 && assumptions.line_shares) {
-    const { result, trace } = validateShares(
-      filterSharesForDimension(assumptions.line_shares, unique_lines),
-      'line_shares',
-      config
-    );
-    throwIfInvalid(result, 'line_shares');
-    warnings.push(...result.warnings);
-    share_traces.line_shares = trace;
-    normalized_line_shares = (result.normalized_value as Record<string, number>) || {};
+    const filtered_shares = filterSharesForDimension(assumptions.line_shares, unique_lines);
+    // If filtering removed all shares (key mismatch), fall back to equal distribution
+    if (Object.keys(filtered_shares).length === 0) {
+      const equal_share = 1.0 / unique_lines.size;
+      for (const line of unique_lines) {
+        normalized_line_shares[line] = equal_share;
+      }
+      warnings.push(
+        `line_shares keys don't match treatment map lines. ` +
+        `Expected: [${Array.from(unique_lines).join(', ')}]. ` +
+        `Using equal distribution: ${equal_share.toFixed(4)} each.`
+      );
+    } else {
+      const { result, trace } = validateShares(filtered_shares, 'line_shares', config);
+      throwIfInvalid(result, 'line_shares');
+      warnings.push(...result.warnings);
+      share_traces.line_shares = trace;
+      normalized_line_shares = (result.normalized_value as Record<string, number>) || {};
+    }
   } else if (unique_lines.size > 0) {
     const equal_share = 1.0 / unique_lines.size;
     for (const line of unique_lines) {
