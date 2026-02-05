@@ -1,8 +1,18 @@
 /**
  * Stage 2: Population allocation (deterministic)
+ *
+ * Uses the Cohort Allocation Engine to prevent double counting.
+ * Each patient is allocated exactly once through the dimension hierarchy.
  */
 
 import { createLogger } from '../utils/log.js';
+import {
+  allocateCohorts,
+  mapCohortsToNodes,
+  CohortAllocationConfig,
+  DEFAULT_ALLOCATION_CONFIG,
+  LeafCohort,
+} from './cohortAllocator.js';
 import type {
   TreatmentMap,
   Assumptions,
@@ -12,107 +22,109 @@ import type {
 
 const logger = createLogger('population');
 
+export interface PopulationAllocationOptions {
+  /** Configuration for the cohort allocator */
+  allocation_config?: Partial<CohortAllocationConfig>;
+}
+
+export interface PopulationAllocationWithTrace extends PopulationAllocation {
+  /** Allocation metadata for explainability */
+  allocation_trace: {
+    base_pool: number;
+    base_pool_source: 'prevalence' | 'incidence';
+    treated_pool: number;
+    conservation_ratio: number;
+    warnings: string[];
+  };
+  /** Per-node allocation traces */
+  node_traces: Map<string, LeafCohort['trace']>;
+}
+
 export function allocatePopulation(
   treatment_map: TreatmentMap,
-  assumptions: Assumptions
-): PopulationAllocation {
+  assumptions: Assumptions,
+  options: PopulationAllocationOptions = {}
+): PopulationAllocationWithTrace {
   logger.info({ base_year: assumptions.base_year }, 'Allocating population to treatment nodes');
 
-  // Use prevalence if available, otherwise incidence
-  const base_pool = assumptions.prevalence || assumptions.incidence || 0;
+  // Build allocation config
+  const allocation_config: CohortAllocationConfig = {
+    ...DEFAULT_ALLOCATION_CONFIG,
+    ...options.allocation_config,
+  };
 
-  if (base_pool === 0) {
-    logger.warn('No base population (incidence or prevalence) provided - using placeholder');
-  }
+  // Run cohort allocation (single-pass, no double counting)
+  const allocation_result = allocateCohorts(treatment_map, assumptions, allocation_config);
 
+  // Map cohorts to treatment nodes
+  const node_to_cohort = mapCohortsToNodes(allocation_result.leaf_cohorts, treatment_map);
+
+  // Build population nodes
   const nodes: PopulationNode[] = [];
+  const node_traces = new Map<string, LeafCohort['trace']>();
   const rollup_by_subtype: Record<string, number> = {};
   const rollup_by_setting: Record<string, number> = {};
   const rollup_by_line: Record<string, number> = {};
 
-  for (const node of treatment_map.nodes) {
-    // Start with base pool
-    let node_population = base_pool;
+  for (const treatment_node of treatment_map.nodes) {
+    const cohort = node_to_cohort.get(treatment_node.node_id);
 
-    // Apply treated rate
-    node_population *= assumptions.treated_rate;
+    if (cohort) {
+      nodes.push({
+        node_id: treatment_node.node_id,
+        eligible_patients: cohort.patients,
+        treated_patients: cohort.patients,
+        patient_years: cohort.patient_years,
+      });
 
-    // Apply subtype share
-    if (node.subtype_key && assumptions.subtype_shares) {
-      const subtype_share = assumptions.subtype_shares[node.subtype_key] || 0;
-      node_population *= subtype_share;
-    }
+      // Store trace for explainability
+      node_traces.set(treatment_node.node_id, cohort.trace);
 
-    // Apply setting/stage share (try setting_shares first, then stage_shares as fallback)
-    if (node.setting_key) {
-      const shares = assumptions.setting_shares || assumptions.stage_shares || {};
-      const share = shares[node.setting_key] || 0;
-      node_population *= share;
-    } else if (node.stage_key && assumptions.stage_shares) {
-      const stage_share = assumptions.stage_shares[node.stage_key] || 0;
-      node_population *= stage_share;
-    }
-
-    // Apply line share (simplified: equal distribution if not specified)
-    if (node.line_key && assumptions.line_shares) {
-      const line_share = assumptions.line_shares[node.line_key] || 0;
-      node_population *= line_share;
-    } else if (node.line_key) {
-      // Default: assume equal distribution across lines if not specified
-      const line_count = countLinesInSetting(
-        treatment_map,
-        node.setting_key || '',
-        node.subtype_key || ''
-      );
-      if (line_count > 0) {
-        node_population *= 1 / line_count;
+      // Rollups
+      if (treatment_node.subtype_key) {
+        rollup_by_subtype[treatment_node.subtype_key] =
+          (rollup_by_subtype[treatment_node.subtype_key] || 0) + cohort.patients;
       }
-    }
-
-    // Apply regimen share (simplified: equal distribution within line)
-    const regimen_count = countRegimensInLine(
-      treatment_map,
-      node.line_key || '',
-      node.setting_key || '',
-      node.subtype_key || ''
-    );
-    if (regimen_count > 1) {
-      node_population *= 1 / regimen_count;
-    }
-
-    // Calculate patient-years using time on treatment
-    let patient_years = node_population;
-    if (node.line_key && assumptions.time_on_treatment_months) {
-      const tot_months = assumptions.time_on_treatment_months[node.line_key];
-      if (tot_months) {
-        patient_years = node_population * (tot_months / 12);
+      if (treatment_node.setting_key) {
+        rollup_by_setting[treatment_node.setting_key] =
+          (rollup_by_setting[treatment_node.setting_key] || 0) + cohort.patients;
       }
-    } else if (node.duration_value && node.duration_rule === 'fixed_months') {
-      patient_years = node_population * (node.duration_value / 12);
-    }
-
-    nodes.push({
-      node_id: node.node_id,
-      eligible_patients: node_population,
-      treated_patients: node_population,
-      patient_years: patient_years,
-    });
-
-    // Rollups
-    if (node.subtype_key) {
-      rollup_by_subtype[node.subtype_key] =
-        (rollup_by_subtype[node.subtype_key] || 0) + node_population;
-    }
-    if (node.setting_key) {
-      rollup_by_setting[node.setting_key] =
-        (rollup_by_setting[node.setting_key] || 0) + node_population;
-    }
-    if (node.line_key) {
-      rollup_by_line[node.line_key] = (rollup_by_line[node.line_key] || 0) + node_population;
+      if (treatment_node.line_key) {
+        rollup_by_line[treatment_node.line_key] =
+          (rollup_by_line[treatment_node.line_key] || 0) + cohort.patients;
+      }
+    } else {
+      // No matching cohort - node gets 0 patients
+      logger.warn({ node_id: treatment_node.node_id },
+        'No matching cohort found - node will have 0 patients');
+      nodes.push({
+        node_id: treatment_node.node_id,
+        eligible_patients: 0,
+        treated_patients: 0,
+        patient_years: 0,
+      });
     }
   }
 
-  const allocation: PopulationAllocation = {
+  // Log warnings from allocation
+  for (const warning of allocation_result.warnings) {
+    logger.warn(warning);
+  }
+
+  // Conservation check
+  const total_treated = nodes.reduce((sum, n) => sum + n.treated_patients, 0);
+  const total_patient_years = nodes.reduce((sum, n) => sum + n.patient_years, 0);
+
+  logger.info({
+    total_nodes: nodes.length,
+    total_treated_patients: Math.round(total_treated),
+    total_patient_years: Math.round(total_patient_years),
+    conservation_ratio: allocation_result.conservation_ratio.toFixed(4),
+    base_pool: allocation_result.base_pool,
+    base_pool_source: allocation_result.base_pool_source,
+  }, 'Population allocation completed');
+
+  return {
     base_year: assumptions.base_year,
     disease: treatment_map.disease,
     molecule: treatment_map.molecule,
@@ -124,48 +136,34 @@ export function allocatePopulation(
       by_setting: rollup_by_setting,
       by_line: rollup_by_line,
     },
-  };
-
-  logger.info(
-    {
-      total_nodes: nodes.length,
-      total_treated_patients: nodes.reduce((sum, n) => sum + n.treated_patients, 0),
-      total_patient_years: nodes.reduce((sum, n) => sum + n.patient_years, 0),
+    allocation_trace: {
+      base_pool: allocation_result.base_pool,
+      base_pool_source: allocation_result.base_pool_source,
+      treated_pool: allocation_result.treated_pool,
+      conservation_ratio: allocation_result.conservation_ratio,
+      warnings: allocation_result.warnings,
     },
-    'Population allocation completed'
-  );
-
-  return allocation;
+    node_traces,
+  };
 }
 
-function countLinesInSetting(
-  map: TreatmentMap,
-  setting_key: string,
-  subtype_key: string
-): number {
-  const unique_lines = new Set(
-    map.nodes
-      .filter(
-        (n) =>
-          (n.setting_key === setting_key || !setting_key) &&
-          (n.subtype_key === subtype_key || !subtype_key) &&
-          n.line_key
-      )
-      .map((n) => n.line_key)
-  );
-  return unique_lines.size;
-}
-
-function countRegimensInLine(
-  map: TreatmentMap,
-  line_key: string,
-  setting_key: string,
-  subtype_key: string
-): number {
-  return map.nodes.filter(
-    (n) =>
-      (n.line_key === line_key || !line_key) &&
-      (n.setting_key === setting_key || !setting_key) &&
-      (n.subtype_key === subtype_key || !subtype_key)
-  ).length;
+/**
+ * Legacy function for backward compatibility
+ * @deprecated Use allocatePopulation with options instead
+ */
+export function allocatePopulationLegacy(
+  treatment_map: TreatmentMap,
+  assumptions: Assumptions
+): PopulationAllocation {
+  const result = allocatePopulation(treatment_map, assumptions);
+  // Return without the extended fields
+  return {
+    base_year: result.base_year,
+    disease: result.disease,
+    molecule: result.molecule,
+    total_incidence: result.total_incidence,
+    total_prevalence: result.total_prevalence,
+    nodes: result.nodes,
+    rollups: result.rollups,
+  };
 }
