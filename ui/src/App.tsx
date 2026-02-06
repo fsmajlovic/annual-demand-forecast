@@ -205,6 +205,45 @@ function App() {
           )}
 
           {result && !isLoading && <Results result={result} />}
+
+          {/* How It Works */}
+          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 mt-8 border border-white/20">
+            <h2 className="text-2xl font-bold text-white mb-2">How It Works</h2>
+            <p className="text-white/70 text-sm mb-6">
+              This system generates 10-year annual demand projections for therapeutic molecules
+              by combining LLM intelligence (GPT-4o) with deterministic math to produce auditable forecasts.
+            </p>
+
+            <div className="grid grid-cols-1 gap-3">
+              {[
+                { stage: '0', name: 'Normalize', desc: 'Canonicalize disease/molecule names, identify biomarkers' },
+                { stage: '0.5', name: 'Regulatory Check', desc: 'Verify FDA approval status, flag non-commercial molecules' },
+                { stage: '1', name: 'Treatment Landscape', desc: 'LLM + web search maps all treatment nodes (subtype \u00d7 setting \u00d7 line \u00d7 regimen \u00d7 dosing)' },
+                { stage: '2', name: 'Resolve Assumptions', desc: 'Merge LLM suggestions, user overrides, and defaults for epidemiology params' },
+                { stage: '3', name: 'Population Allocation', desc: 'Deterministic hierarchical allocation of patients to treatment nodes' },
+                { stage: '4', name: 'Demand Calculation', desc: 'Compute administered & dispensed mg (with vial rounding/wastage)' },
+                { stage: '5', name: 'Forecast', desc: 'Project 2024\u20132034 across base/low/high scenarios using CAGR & multipliers' },
+              ].map((item) => (
+                <div key={item.stage} className="flex items-start gap-4 bg-white/5 rounded-lg px-4 py-3">
+                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-indigo-500/30 text-indigo-200 font-bold text-sm flex items-center justify-center">
+                    {item.stage}
+                  </span>
+                  <div>
+                    <span className="text-white font-semibold">{item.name}</span>
+                    <p className="text-white/60 text-sm mt-0.5">{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-white/10 flex flex-wrap gap-4 text-xs text-white/40">
+              <span>LLM for intelligence, math for calculations</span>
+              <span>|</span>
+              <span>SQLite caching (~$0 for repeat runs)</span>
+              <span>|</span>
+              <span>Full audit trail on every run</span>
+            </div>
+          </div>
         </div>
       </div>
     </QueryClientProvider>
