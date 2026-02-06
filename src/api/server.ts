@@ -9,7 +9,7 @@ import { readJson, getRunDir } from '../utils/io.js';
 import { createLogger } from '../utils/log.js';
 import type { PipelineInputs, TreatmentMap, Assumptions, DemandNode } from '../domain/types.js';
 import type { RegulatoryStatus } from '../llm/schemas.js';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { existsSync } from 'fs';
 import { config } from 'dotenv';
 
@@ -18,7 +18,7 @@ config();
 
 const logger = createLogger('api-server');
 const app = express();
-const PORT = 3001;
+const PORT = parseInt(process.env.PORT || '3001', 10);
 
 app.use(cors());
 app.use(express.json());
@@ -272,6 +272,16 @@ app.get('/api/export/:runId/:format', async (req, res) => {
     res.download(csvPath, `demand_${runId}.csv`);
   }
 });
+
+// Serve built React UI in production
+const uiDistPath = resolve(process.cwd(), 'ui', 'dist');
+if (existsSync(uiDistPath)) {
+  app.use(express.static(uiDistPath));
+  // SPA fallback — serve index.html for any non-API route (Express 5 syntax)
+  app.get('{*path}', (_req, res) => {
+    res.sendFile(join(uiDistPath, 'index.html'));
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`\n🚀 API Server running at http://localhost:${PORT}`);

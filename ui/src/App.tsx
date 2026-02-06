@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ForecastForm from './components/ForecastForm'
 import Results from './components/Results'
@@ -93,7 +93,7 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
     setChecking(true)
 
     try {
-      const res = await fetch(`http://localhost:3001/api/auth/verify`, {
+      const res = await fetch(`/api/auth/verify`, {
         headers: { Authorization: `Bearer ${password}` },
       })
       if (res.ok) {

@@ -1,0 +1,11 @@
+node_modules
+ui/node_modules
+dist
+ui/dist
+runs
+*.db
+*.db-journal
+.env
+.git
+.DS_Store
+*.log

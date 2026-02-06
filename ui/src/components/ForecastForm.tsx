@@ -27,7 +27,7 @@ export default function ForecastForm({ token, onResult, onLoadingChange, onProgr
     try {
       // Connect to SSE endpoint for progress updates
       const eventSource = new EventSource(
-        `http://localhost:3001/api/run?disease=${encodeURIComponent(disease)}&molecule=${encodeURIComponent(molecule)}&geo=${geo}&base_year=${baseYear}&horizon_years=${horizonYears}&disable_cache=${disableCache}&token=${encodeURIComponent(token)}`
+        `/api/run?disease=${encodeURIComponent(disease)}&molecule=${encodeURIComponent(molecule)}&geo=${geo}&base_year=${baseYear}&horizon_years=${horizonYears}&disable_cache=${disableCache}&token=${encodeURIComponent(token)}`
       )
 
       eventSource.addEventListener('progress', (event) => {
@@ -50,7 +50,7 @@ export default function ForecastForm({ token, onResult, onLoadingChange, onProgr
 
       eventSource.onerror = () => {
         // EventSource doesn't expose status codes, so try a fetch to check if it's a 401
-        fetch('http://localhost:3001/api/auth/verify', {
+        fetch('/api/auth/verify', {
           headers: { Authorization: `Bearer ${token}` },
         }).then((res) => {
           if (res.status === 401) {

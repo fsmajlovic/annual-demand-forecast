@@ -462,13 +462,13 @@ export default function Results({ result }: Props) {
         <h2 className="text-2xl font-bold text-gray-900 mb-4">Export Results</h2>
         <div className="flex space-x-4">
           <a
-            href={`http://localhost:3001/api/export/${result.run_id}/json`}
+            href={`/api/export/${result.run_id}/json`}
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700"
           >
             Download JSON
           </a>
           <a
-            href={`http://localhost:3001/api/export/${result.run_id}/csv`}
+            href={`/api/export/${result.run_id}/csv`}
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-green-600 hover:bg-green-700"
           >
             Download CSV
