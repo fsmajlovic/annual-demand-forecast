@@ -23,9 +23,37 @@ const PORT = 3001;
 app.use(cors());
 app.use(express.json());
 
-// Health check
+// Health check (no auth required)
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Auth middleware — protects all /api/* routes
+const APP_PASSWORD = process.env.APP_PASSWORD;
+
+app.use('/api', (req, res, next) => {
+  if (!APP_PASSWORD) {
+    // No password configured — allow all requests
+    return next();
+  }
+
+  // Accept token from Authorization header or query parameter
+  // (query param needed because EventSource doesn't support custom headers)
+  const authHeader = req.headers.authorization;
+  const queryToken = req.query.token as string | undefined;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : queryToken;
+
+  if (token !== APP_PASSWORD) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  next();
+});
+
+// Token verification endpoint (used by the login screen)
+app.get('/api/auth/verify', (_req, res) => {
+  res.json({ status: 'ok' });
 });
 
 // Run pipeline with Server-Sent Events for progress
@@ -248,7 +276,8 @@ app.get('/api/export/:runId/:format', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`\n🚀 API Server running at http://localhost:${PORT}`);
   console.log(`   Health check: http://localhost:${PORT}/health`);
-  console.log(`   OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? '✓ Set' : '✗ Not set'}\n`);
+  console.log(`   OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? '✓ Set' : '✗ Not set'}`);
+  console.log(`   AUTH: ${APP_PASSWORD ? '✓ Password protected' : '✗ No password (open access)'}\n`);
 }).on('error', (error) => {
   logger.error({ error }, 'Server startup error');
   console.error('Failed to start server:', error);

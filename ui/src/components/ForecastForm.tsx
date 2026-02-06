@@ -2,12 +2,14 @@ import { useState } from 'react'
 import type { PipelineResult } from '../App'
 
 interface Props {
+  token: string
   onResult: (result: PipelineResult) => void
   onLoadingChange: (loading: boolean) => void
   onProgressChange: (progress: string) => void
+  onAuthError: () => void
 }
 
-export default function ForecastForm({ onResult, onLoadingChange, onProgressChange }: Props) {
+export default function ForecastForm({ token, onResult, onLoadingChange, onProgressChange, onAuthError }: Props) {
   const [disease, setDisease] = useState('')
   const [molecule, setMolecule] = useState('')
   const [geo, setGeo] = useState('US')
@@ -25,7 +27,7 @@ export default function ForecastForm({ onResult, onLoadingChange, onProgressChan
     try {
       // Connect to SSE endpoint for progress updates
       const eventSource = new EventSource(
-        `http://localhost:3001/api/run?disease=${encodeURIComponent(disease)}&molecule=${encodeURIComponent(molecule)}&geo=${geo}&base_year=${baseYear}&horizon_years=${horizonYears}&disable_cache=${disableCache}`
+        `http://localhost:3001/api/run?disease=${encodeURIComponent(disease)}&molecule=${encodeURIComponent(molecule)}&geo=${geo}&base_year=${baseYear}&horizon_years=${horizonYears}&disable_cache=${disableCache}&token=${encodeURIComponent(token)}`
       )
 
       eventSource.addEventListener('progress', (event) => {
@@ -47,7 +49,18 @@ export default function ForecastForm({ onResult, onLoadingChange, onProgressChan
       })
 
       eventSource.onerror = () => {
-        setError('Connection to server lost')
+        // EventSource doesn't expose status codes, so try a fetch to check if it's a 401
+        fetch('http://localhost:3001/api/auth/verify', {
+          headers: { Authorization: `Bearer ${token}` },
+        }).then((res) => {
+          if (res.status === 401) {
+            onAuthError()
+          } else {
+            setError('Connection to server lost')
+          }
+        }).catch(() => {
+          setError('Connection to server lost')
+        })
         onLoadingChange(false)
         eventSource.close()
       }
