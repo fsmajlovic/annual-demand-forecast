@@ -118,6 +118,16 @@ export async function resolveAssumptions(
   }
 
   // Step 3: Merge (priority: user overrides > LLM suggestions > defaults)
+  // Normalize treated_rate: LLM might return as percentage (80) or decimal (0.80)
+  let raw_treated_rate = user_overrides.treated_rate ?? suggestions.treated_rate.value;
+  if (raw_treated_rate > 1) {
+    logger.warn(
+      { raw_value: raw_treated_rate, normalized: raw_treated_rate / 100 },
+      'treated_rate appears to be a percentage, converting to decimal'
+    );
+    raw_treated_rate = raw_treated_rate / 100;
+  }
+
   const assumptions: Assumptions = {
     base_year,
     horizon_years,
@@ -137,7 +147,7 @@ export async function resolveAssumptions(
       Object.fromEntries(
         Object.entries(suggestions.stage_shares).map(([key, val]) => [key, val.share])
       ),
-    treated_rate: user_overrides.treated_rate ?? suggestions.treated_rate.value,
+    treated_rate: raw_treated_rate,
     time_on_treatment_months:
       user_overrides.time_on_treatment_months ??
       Object.fromEntries(

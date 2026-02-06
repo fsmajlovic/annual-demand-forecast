@@ -1,13 +1,53 @@
 import { useState } from 'react'
-import type { PipelineResult } from '../App'
+import type { PipelineResult, RegulatoryStatus } from '../App'
 
 interface Props {
   result: PipelineResult
 }
 
+function getStatusBadgeColor(status: RegulatoryStatus['status']): string {
+  switch (status) {
+    case 'approved':
+      return 'bg-green-100 text-green-800 border-green-200'
+    case 'clinical_testing_only':
+      return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+    case 'no_fda_approval':
+      return 'bg-orange-100 text-orange-800 border-orange-200'
+    case 'discontinued':
+      return 'bg-red-100 text-red-800 border-red-200'
+    case 'withdrawn':
+      return 'bg-red-100 text-red-800 border-red-200'
+    default:
+      return 'bg-gray-100 text-gray-800 border-gray-200'
+  }
+}
+
+function getStatusLabel(status: RegulatoryStatus['status']): string {
+  switch (status) {
+    case 'approved':
+      return 'FDA Approved'
+    case 'clinical_testing_only':
+      return 'Clinical Testing Only'
+    case 'no_fda_approval':
+      return 'No FDA Approval'
+    case 'discontinued':
+      return 'Discontinued'
+    case 'withdrawn':
+      return 'Withdrawn'
+    default:
+      return 'Unknown'
+  }
+}
+
 export default function Results({ result }: Props) {
-  const { summary, treatment_nodes, demand_summary, forecast, audit_trail, metadata } = result
+  const { summary, regulatory_status, treatment_nodes, demand_summary, forecast, audit_trail, metadata } = result
   const [showAudit, setShowAudit] = useState(false)
+
+  const hasWarning = regulatory_status && (
+    regulatory_status.status !== 'approved' ||
+    !regulatory_status.is_commercially_available ||
+    regulatory_status.data_reliability_warning
+  )
 
   const formatStage = (stage: string) => {
     return stage
@@ -22,6 +62,68 @@ export default function Results({ result }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* Regulatory Status Warning Banner */}
+      {hasWarning && regulatory_status && (
+        <div className="bg-amber-50 border-2 border-amber-400 rounded-xl shadow-lg p-6">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-8 w-8 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div className="ml-4 flex-1">
+              <h3 className="text-lg font-bold text-amber-800">
+                Data Reliability Warning
+              </h3>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold border ${getStatusBadgeColor(regulatory_status.status)}`}>
+                  {getStatusLabel(regulatory_status.status)}
+                </span>
+                {regulatory_status.current_phase && (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                    {regulatory_status.current_phase}
+                  </span>
+                )}
+                {!regulatory_status.is_commercially_available && (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800 border border-gray-200">
+                    Not Commercially Available
+                  </span>
+                )}
+              </div>
+              {regulatory_status.data_reliability_warning && (
+                <p className="mt-3 text-amber-700">
+                  {regulatory_status.data_reliability_warning}
+                </p>
+              )}
+              <div className="mt-3 text-sm text-amber-600">
+                <strong>Note:</strong> Demand forecasts for non-approved or discontinued molecules may not reflect commercial reality.
+                Use these estimates with caution.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Regulatory Status Badge (for approved molecules) */}
+      {regulatory_status && !hasWarning && (
+        <div className="bg-green-50 border border-green-200 rounded-xl shadow-sm p-4">
+          <div className="flex items-center">
+            <svg className="h-5 w-5 text-green-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-green-800 font-medium">
+              FDA Approved {regulatory_status.fda_approval_date && `(${regulatory_status.fda_approval_date})`}
+            </span>
+            {regulatory_status.fda_approved_indications.length > 0 && (
+              <span className="ml-2 text-green-600 text-sm">
+                for {regulatory_status.fda_approved_indications.slice(0, 2).join(', ')}
+                {regulatory_status.fda_approved_indications.length > 2 && ` +${regulatory_status.fda_approved_indications.length - 2} more`}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Run Metadata */}
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl shadow-lg p-6 text-white">
         <div className="flex items-center justify-between">

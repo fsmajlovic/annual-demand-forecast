@@ -61,7 +61,8 @@ export function generateForecast(
         prevalence: base_assumptions.prevalence
           ? base_assumptions.prevalence * epi_scale
           : undefined,
-        treated_rate: base_assumptions.treated_rate * treated_rate_scale,
+        // Cap treated_rate at 1.0 to prevent validation errors when multipliers push it above 100%
+        treated_rate: Math.min(1.0, base_assumptions.treated_rate * treated_rate_scale),
         time_on_treatment_months: base_assumptions.time_on_treatment_months
           ? Object.fromEntries(
               Object.entries(base_assumptions.time_on_treatment_months).map(([key, val]) => [

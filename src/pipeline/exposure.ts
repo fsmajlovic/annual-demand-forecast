@@ -350,8 +350,9 @@ function extractMaintenanceIntervalFromNotes(
     const cycle_length = parseInt(cycle_match[3], 10);
     const doses_per_cycle = 2; // "days X and Y" = 2 doses
     const effective_interval = cycle_length / doses_per_cycle;
-    // Only correct if declared interval seems wrong (e.g., interval between doses within cycle)
-    if (declared_interval < cycle_length && Math.abs(effective_interval - declared_interval) > 2) {
+    // Always apply cycle-based correction when pattern is detected
+    // The pattern explicitly tells us there are N doses per cycle
+    if (Math.abs(effective_interval - declared_interval) > 1) {
       return effective_interval;
     }
   }
@@ -363,7 +364,8 @@ function extractMaintenanceIntervalFromNotes(
     const cycle_length = parseInt(cycle_match_3[4], 10);
     const doses_per_cycle = 3;
     const effective_interval = cycle_length / doses_per_cycle;
-    if (declared_interval < cycle_length && Math.abs(effective_interval - declared_interval) > 2) {
+    // Always apply cycle-based correction when pattern is detected
+    if (Math.abs(effective_interval - declared_interval) > 1) {
       return effective_interval;
     }
   }
